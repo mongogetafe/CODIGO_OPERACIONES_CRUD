@@ -380,19 +380,6 @@ db.clientes.find({nombre: {$ne: "María", $ne: "Carlos"}},{_id:0, nombre: 1}) //
 
 db.clientes.find({$and: [{nombre: {$ne: "María"}},{nombre: {$ne: "Carlos"}}]},{_id:0, nombre: 1}) // Si
 
-// En que se diferencia $and de la coma and implícita
-
-// db.clientes.find( {
-//     $and: [
-//         { $or: [ { edad: { $lt : 18 } }, { qty : { $gt: 50 } } ] },
-//         { $or: [ { sale: true }, { price : { $lt : 5 } } ] }
-//     ]
-// } )
-
-
-
-
-
 // $ or
 
 db.clientes.find({$or: [{edad: {$gte: 18}}, {nombre: "José", edad: {$exists: true}}]})
@@ -414,8 +401,156 @@ db.clientes.find({$nor : [
 
 db.clientes.find({$nor: [{nombre: "María"},{nombre: "Carlos"}]},{_id:0, nombre: 1})
 
+// Conclusiones sobre operadores lógicos
+
+// El operador $and necesita ser utilizado en vez de la coma implícita cuando utilizamos
+// el mismo operador (en los ejemplos $or) en la consulta
+// All credits to Juan Carlos
+
+db.clientes.find( {
+    $and : [
+        { $or : [ { nombre : "María" }, { nombre : "Carlos" } ] },
+        { $or : [ { apellidos : "Pérez" }, { apellidos : "García" } ] },
+        { $or : [ { nombre : {$exists: true} }, { apellidos : {$exists: true} } ] }
+    ]
+}, {_id:0, edad:1, nombre:1, apellidos: 1})
+
+db.clientes.find( {
+    $and : [
+        { $nor : [ { nombre : "María" }, { nombre : "Carlos" } ] },
+        { $nor : [ { apellidos : "Pérez" }, { apellidos : "García" } ] },
+        { $or : [ { nombre : {$exists: true} }, { apellidos : {$exists: true} } ] }
+    ]
+}, {_id:0, edad:1, nombre:1, apellidos: 1})
+
 // Operadores de evaluación
 
 // $regex Utilizar expresiones regulares admite opciones
 
+// {<campo> : {$regex: <expresion-regular>, $options: <opciones>}}
+// La expresión regular se puede pasar como tal /expresión/ ó bien como string 'expresion'
+// Las opciones se pueden añadir a la expresión regular /opciones y no sería necesario $options
+
+db.clientes.insert([
+    {nombre:'Luis', apellidos:'García Pérez'},
+    {nombre:'Pedro', apellidos:'Gutiérrez López'},
+    {nombre:'Sara', apellidos:'López Gómez'},
+    {nombre:'María', apellidos:'Pérez Góngora'},
+    {nombre:'Juan', apellidos:'Pérez \nGóngora'},
+])
+
+// Ejemplo de sintaxis básica
+
+db.clientes.find({apellidos: {$regex: /G/}}) // Expresión regular con cualquier G mayúscula
+
+db.clientes.find({apellidos: {$regex: 'G'}}) // Idem anterior con string
+
+db.clientes.find({apellidos: {$regex: '^G'}}) // Los docs. que en su campo apellidos comiencen por G mayúscula
+
+db.clientes.find({apellidos: {$regex: 'Gón'}}) // Los docs. que en su campo apellidos contengan ese fragmento de cadena
+
+db.clientes.find({apellidos: {$regex: 'ez$'}}) // Los docs. que en su campo apellidos finalicen en ez
+
+db.clientes.find({apellidos: {$regex: '^gu', $options: 'i'}}) // Opción para case insensitive
+
+db.clientes.find({apellidos: {$regex: /^gu/i}}) // Idem en formato expresión regular
+
+db.clientes.find({apellidos: {$regex: '^G', $options: 'm'}}) // Reconoce los sáltos de línea
+
+db.clientes.find({apellidos: {$regex: 'Gó m', $options: 'x'}})  // Omite los espacios en blanco
+
+db.clientes.insert({apellidos: 'Friedrich Hieronymus, \nbarón de Münchhausen'})
+
+db.clientes.find({apellidos: {$regex: 'ronymus, ba', $options: 'm'}})
+
+db.clientes.find({apellidos: {$regex: 'ronymus.*ba', $options: 's'}}) // Detectar todos los caracteres antes del salto de línea
+                                                                     // (para que detecte la coma)
+
+
+// Operador $comment
+
+// db.<coleccion>.find(<consulta>, $comment: <string comentarios>)
+
+db.clientes.find({apellidos: {$regex: 'Gó m', $options: 'x'}, $comment: 'Omite los espacios en blanco'})  
+
+// Operadores de proyección
+
+// Operador $ (en proyección)
+
+// Definir en la proyección los elementos de un array a devolver en función de la consulta (relacionamos la proyección
+// con el documento de consulta)
+
+// db.<coleccion>.find({<array>:<valor>}, {"<array>.$": 1})
+
+use videojuegos
+
+db.resultados.insert([
+    {jugador: 'Pepe', juego: 'Tetris', puntos: [79,102,89,101]},
+    {jugador: 'Laura', juego: 'Tetris', puntos: [120,99,100,120]}
+])
+
+db.resultados.find({juego: 'Tetris', puntos: {$gte: 100}}, {_id: 0, 'puntos.$': 1, jugador: 1})
+
+// Con elemMatch hace los mismo
+
+db.resultados.find({juego: 'Tetris', puntos: {$gte: 100}}, {_id: 0, puntos: {$elemMatch: {$gte: 100}}, jugador: 1})
+
+// $elemMatch (en proyección)
+// A diferencia de $ permite pasar expresiones para poder usarlo con arrays de documentos
+// y para poder el campo de la consulta
+
+db.juegos.insert([
+    {juego: 'Tetris', jugadores: [
+        {nombre: 'Pepe', maxPuntuacion: 98},
+        {nombre: 'Luisa', maxPuntuacion: 110},
+        {nombre: 'Jon', maxPuntuacion: 105},
+    ]},
+    {juego: 'Mario Bros', jugadores: [
+        {nombre: 'Pepe', maxPuntuacion: 70},
+        {nombre: 'Luisa', maxPuntuacion: 98},
+        {nombre: 'Jon', maxPuntuacion: 110},
+    ]}
+])
+
+db.juegos.find({juego: 'Tetris'},{_id: 0, jugadores: {$elemMatch: {maxPuntuacion: {$gte: 100}}}})
+
+// Simulamos pregunta de la certificación con $elemMatch para proyección
+
+// Para la colección juegos con los siguientes documentos:
+
+{juego: 'Tetris', jugadores: [
+    {nombre: 'Pepe', maxPuntuacion: 98},
+    {nombre: 'Luisa', maxPuntuacion: 110},
+    {nombre: 'Jon', maxPuntuacion: 105},
+]},
+{juego: 'Mario Bros', jugadores: [
+    {nombre: 'Pepe', maxPuntuacion: 70},
+    {nombre: 'Luisa', maxPuntuacion: 98},
+    {nombre: 'Jon', maxPuntuacion: 110},
+]}
+
+// con la siguiente consulta
+
+db.juegos.find({juego: 'Tetris'},{_id: 0, jugadores: {$elemMatch: {maxPuntuacion: {$gte: 100}}}})
+
+// Marca la solución correcta devuelta por la consulta
+
+// a) { "jugadores" : [ { "nombre" : "Luisa", "maxPuntuacion" : 110 }, {nombre: 'Jon', maxPuntuacion: 105} ] }
+
+// b) { "jugadores" : [ {nombre: 'Jon', maxPuntuacion: 105} ] }
+
+// c) { "jugadores" : [ { "nombre" : "Luisa", "maxPuntuacion" : 110 } ] }  // Esta es la correcta
+
+// d) { "jugadores" : [ { "nombre" : "Luisa", "maxPuntuacion" : 110 } ] }
+//    { "jugadores" : [ { "nombre" : "Jon", "maxPuntuacion" : 110  } ] }
+
+// Operador $slice en proyección
+
+// db.<coleccion>.find(<consulta>,{<array>: {$slice: <valor>}})
+
+db.resultados.find({}, {_id: 0, puntos: {$slice: 2}}) // devuelve los dos primeros elementos del array
+
+db.resultados.find({}, {_id: 0, puntos: {$slice: -2}}) // devuelve los dos últimos elementos del array
+
+db.resultados.find({}, {_id: 0, puntos: {$slice: [1,2]}}) // rango tipo skip-limit
 
