@@ -142,3 +142,177 @@ db.libros.update({}, {$set: {editorial: 'Planeta'}}) // Solo actualiza el primer
 db.libros.update({}, {$set: {editorial: 'Planeta'}}, {multi: true}) // Actualiza todos los docs encontrados por la consulta
 
 db.libros.update({}, {$rename: {editorial: 'ed'}}, {multi: true}) 
+
+// Renombrado de campos en docs embebidos
+
+db.libros.insert({
+    title:"Mas Ruido que Nueces", 
+    autor: "William Shakespeare", 
+    categoria: {
+        primaria: "novela",
+        lengua: "inglés"
+    }
+})
+
+db.libros.update({ title:"Mas Ruido que Nueces"}, {$rename: {"categoria.lengua": 'categoria.idioma'}}) 
+
+db.libros.update(
+    { title:"Mas Ruido que Nueces"},
+    {$set: {
+        editoriales: [
+            {nombre: "Planeta", isbn: "vdfhkvjhdfkjhv"},
+            {nombre: "Deusto", isbn: "cssjdjscgjshgd"}
+        ]
+    }}
+)
+
+db.libros.update({ title:"Mas Ruido que Nueces"}, {$rename: {"editoriales.isbn": 'editoriales.codIsbn'}}) // Error
+// WriteResult({
+//     "nMatched" : 0,
+//     "nUpserted" : 0,
+//     "nModified" : 0,
+//     "writeError" : {
+//             "code" : 28,
+//             "errmsg" : "cannot use the part (editoriales of editoriales.isbn) to traverse the element ({editoriales: [ { nombre: \"Planeta\", isbn: \"vdfhkvjhdfkjhv\" }, { nombre: \"Deusto\", isbn: \"cssjdjscgjshgd\" } ]})"
+//     }
+// })
+
+db.libros.update({ title:"Mas Ruido que Nueces"}, {$rename: {"editoriales.0.isbn": 'editoriales.0.codIsbn'}}) // También error
+
+// luego el renombrado de campos de documentos embebidos se puede realizar con la notación del punto
+// pero no es posible en renombrado de campos de documentos embebidos dentro de un array
+
+// Operadores de actualización para arrays
+
+// $ (operador posicional) para actualizacion
+
+// { "<array>.$": valor }
+
+db.libros.update( // para set de datos
+    { title:"Mas Ruido que Nueces"},
+    {$set: {categorias: ["inglesa","medieval","novela"]}}
+)
+
+db.libros.update({categorias: "novela"},{$set: {"categorias.$": "Novela"}},{multi: true})
+
+// Otro ejemplo
+
+db.libros.insert([
+    { titulo:"Mas Ruido que Nueces", autor: "William Shakespeare", valoraciones: ["bien","regular","bien","mal","muy bien"]},
+    { titulo:"La Historia Interminable", autor: "Michael Ende", valoraciones: ["muy bien","regular","bien","bien","muy bien"]},
+])
+
+db.libros.update({valoraciones: "bien"}, {$set: {"valoraciones.$": "correcto"}}, {multi: true}) // Solamente cambia la
+                                                                                        // primera coincidencia
+
+// $[] (operador posicional) idem anterior pero cambia todos los elementos del array
+// en los documentos de la consulta
+
+// { "<array>.$[]": valor }
+
+db.libros.insert({titulo: "The Firm", autor:"John Grisham", opiniones: [3,2,5,4,6]})
+
+db.libros.update({titulo: "The Firm"}, {$set: {"opiniones.$[]": 7}})
+
+// $[<identificador>] (operador posicional) idem anterior pero permite especificar qué elementos serán
+// modificados de los docs de la consulta
+
+// { "<array>.$[<identificador>]": valor }
+// {arrayFilters:[{<identificador>: <condicion>}]}
+
+db.libros.update(
+    {titulo: "The Firm"},
+    {$set: {precios: [22,21,13,18,21,14]}}
+)
+
+db.libros.update (
+    {titulo: "The Firm"},
+    {$set: {"precios.$[elem]": 15}},
+    {arrayFilters: [{"elem": {$lt: 15}}]}
+)
+
+// Otro ejemplo más... estos operadores se pueden usar con otros operadores de campo que no sean $set 
+// Con $inc
+
+"precios" : [
+    22,
+    21,
+    15,
+    18,
+    21,
+    15
+]
+
+db.libros.update(
+    {titulo: "The Firm"},
+    {$inc: {"precios.$[]": 2}}
+)
+
+a) [22, 21, 15, 18, 21, 15]
+
+b) [24, 23, 17, 20, 23, 17] // correcta
+
+c) [2, 2, 2, 2, 2, 2]
+
+d) [24, 21, 15, 18, 21, 15]
+
+// $addToSet Añade un valor a un campo array salvo que el valor ya exista y en ese caso no hace nada
+// {$addToSet: {<array>: valor}}
+
+
+db.libros.update({},{$set: {categorias: ['novela']}},{multi: true})
+
+db.libros.update({}, {$addToSet: {categorias: "castellano"}},{multi: true})  // Operación idempotente
+
+// $each
+
+db.libros.update({"titulo" : "The Firm"},{$addToSet: {categorias: ["USA","drama"]}}) // categorias ["novela", "castellano",["USA","drama"]]
+
+db.libros.update({"titulo" : "The Firm"},{$addToSet: {categorias: {$each: ["USA","drama"]}}}) 
+
+// $pop
+// {$pop: {<array>: -1 | 1}} // para -1 elimina el primer elemento y para 1 el último elemento del array
+
+db.libros.update({"titulo" : "The Firm"},{$pop: {categorias: -1}}) // En este caso elimina el primero
+
+// $pull elimina los elementos que cumplan la condición especificada
+// {$pull: {<array>: valor|condicion}}
+
+db.libros.update({"titulo" : "The Firm"},{$pull: {categorias: "USA"}})
+
+db.libros.update({"titulo" : "The Firm"},{$set: {categorias: ["castellano", "USA", "drama","novela","castellano"]}}) // Reponemos array
+
+// Ejemplo con expresión
+
+db.libros.update({"titulo" : "The Firm"},{$pull: {categorias: {$in: ["castellano","drama"]}}}) // Funciona como un $pullAll
+
+// Ejemplo con expresión regular para eliminar todos All credits to Juan Carlos
+
+db.libros.update({"titulo" : "The Firm"},{$pull: {categorias: /./}})
+
+// $pullAll idem con una lista de elementos a eliminar
+// {$pullAll: {<array>: [valor1, valor2, ...]}}
+
+db.libros.update({"titulo" : "The Firm"},{$pullAll: {categorias: ["castellano","drama"]}}) 
+
+// $push y modificadores 
+// {$push: {<array>: {<modificadores: valor, ...}}}
+
+// Básico añadir un elemento al final del array
+
+db.libros.insert({titulo: "El Caso Fitgerald", autor: "John Grisham", categorias: ["novela","drama"]})
+
+db.libros.update({titulo: "El Caso Fitgerald"}, {$push: {categorias: "USA"}}) // Añade el elemento
+
+// Añadir varios elementos al final del array
+
+db.libros.update({titulo: "El Caso Fitgerald"}, {$push: {categorias: {$each: ["suspense","inglés"]}}}) // Añade cada elemento
+
+// Añadir elementos con modificadores del array
+
+db.libros.update({titulo: "El Caso Fitgerald"}, {$push: {categorias: {$each:["best-seller","leyes"], $sort: -1, $slice: -3}}})
+
+// Añadir elementos con el modificador de posición
+
+db.libros.update({titulo: "El Caso Fitgerald"}, {$push: {categorias: {$each:["tapa dura","america"], $position: 1 }}}) // añade desde
+                                                                                                            // el índice de la posición
