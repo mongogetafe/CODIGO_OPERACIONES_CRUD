@@ -316,3 +316,13 @@ db.libros.update({titulo: "El Caso Fitgerald"}, {$push: {categorias: {$each:["be
 
 db.libros.update({titulo: "El Caso Fitgerald"}, {$push: {categorias: {$each:["tapa dura","america"], $position: 1 }}}) // añade desde
                                                                                                             // el índice de la posición
+
+// Método updateOne() idem update() pero solo puede actualizar un doc (con lo cual no tiene la opción multi)
+// Sintaxis es igual
+
+// Método updateMany() idem update pero siempre para todos los documentos de la consulta (equivalente a multi: true)
+// Sintaxis es igual
+
+// Métodos adicionales
+
+// https://docs.mongodb.com/manual/reference/update-methods/
